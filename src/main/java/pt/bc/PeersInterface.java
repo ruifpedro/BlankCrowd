@@ -1,18 +1,21 @@
 package pt.bc;
 
-import java.util.Iterator;
+import java.util.NavigableSet;
 
-/**
- * Created by Force on 30/10/2017.
- */
 public interface PeersInterface {
-	void add(String peer);
+	void add(String host, String peer);
 
 	void remove(String peer);
 
+	void remove(String host, String peer);
+
 	boolean contains(String peer);
 
-	Iterator<String> getIterator();
+	boolean contains(String host, String peer);
+
+	NavigableSet<String> getSet();
 
 	int size();
+
+
 }

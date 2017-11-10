@@ -1,6 +1,8 @@
 package pt.bc;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.ObjectOutputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -20,25 +22,30 @@ public class BroadcastThread extends Thread {
 	protected DatagramSocket socket = null;
 	protected String network;
 	protected String hostAddress;
-	private final int broadcaatPort = Configuration.authPort;
+	private final int broadcastPort = Configuration.authPort;
 	private static int broadcastSleep = Configuration.broadcastSleep;
 
+	private boolean isRunning = true;
 	public ConcurrentSkipListSet<String> peers;
+
+	private PeersInterface monitor;
 
 	/**
 	 * BroadcastThread constructor
+	 *
 	 * @param name
 	 * @param hostAddress
 	 * @param network
 	 * @throws SocketException
 	 */
-	public BroadcastThread(String name, String hostAddress, String network) throws SocketException {
+	public BroadcastThread(String name, String hostAddress, String network, PeersInterface monitor) throws SocketException {
 		super(name);
 		this.socket = new DatagramSocket();
 		socket.setReuseAddress(true);
 		this.hostAddress = hostAddress;
 		this.network = network;
 		this.peers = new ConcurrentSkipListSet<>();
+		this.monitor = monitor;
 	}
 
 	/**
@@ -50,15 +57,13 @@ public class BroadcastThread extends Thread {
 
 		//broadcasting task
 		Runnable broadcastTask = () -> {
-			while (true) {
+			while (isRunning) {
 				try {
 					System.out.printf("%s@%s -> Broadcasting challenge\n", getName(), hostAddress);
 					//broadcast a challenge
 					broadcast(socket, network, challenge, challenge.length);
 					sleep(broadcastSleep);
-				} catch (IOException e) {
-					e.printStackTrace();
-				} catch (InterruptedException e) {
+				} catch (IOException | InterruptedException e) {
 					e.printStackTrace();
 				}
 			}
@@ -66,7 +71,7 @@ public class BroadcastThread extends Thread {
 
 		//challenge solved listener
 		Runnable challengeListener = () -> {
-			while (true) {
+			while (isRunning) {
 				byte[] data = new byte[32];
 				DatagramPacket packet = new DatagramPacket(data, data.length);
 				try {
@@ -77,23 +82,30 @@ public class BroadcastThread extends Thread {
 
 						String peerAddress = packet.getAddress().getHostAddress();
 						peers.add(peerAddress);
+						monitor.add(hostAddress, peerAddress);
 					}
-				} catch (IOException e) {
-					e.printStackTrace();
-				} catch (NoSuchAlgorithmException e) {
+				} catch (IOException | NoSuchAlgorithmException e) {
 					e.printStackTrace();
 				}
 			}
 		};
 
 		Runnable sharingTask = () -> {
-			while(true){
+			while (isRunning) {
 				//poc - share peer list¶
 				try {
-					byte[] toShare = {0};
-					peers.toString().getBytes(Charset.defaultCharset());
+					ByteArrayOutputStream baos = new ByteArrayOutputStream();
+					ObjectOutputStream oos = new ObjectOutputStream(baos);
+//					baos.write(monitor.getSet().toString().getBytes());
+					oos.writeObject(monitor.getSet());
 
-					DatagramPacket toSharePacket = new DatagramPacket(toShare, toShare.length);
+					byte[] dataToShare = baos.toByteArray();
+
+
+//					byte[] toShare = {0};
+//					peers.toString().getBytes(Charset.defaultCharset());
+
+					DatagramPacket toSharePacket = new DatagramPacket(dataToShare, dataToShare.length);
 
 					DatagramSocket commSocket = new DatagramSocket(Configuration.commPort);
 
@@ -110,8 +122,8 @@ public class BroadcastThread extends Thread {
 
 		ArrayList<Thread> threads = new ArrayList<>();
 
-		threads.add(new Thread(broadcastTask));
-		threads.add(new Thread(challengeListener));
+		threads.add(new Thread(broadcastTask, "broadcastTask@"+this.hostAddress));
+		threads.add(new Thread(challengeListener, "challengeListenerTask@"+this.hostAddress));
 
 		threads.stream().sequential().forEach(Thread::start);
 
@@ -119,13 +131,17 @@ public class BroadcastThread extends Thread {
 			threads.stream().sequential().forEach(t -> {
 				try {
 					t.join(1000);
-//					if(!t.isAlive())
-//						threads.remove(t);
+					if (!t.isAlive())
+						threads.remove(t);
 				} catch (InterruptedException e) {
 					e.printStackTrace();
 				}
 			});
 		}
+	}
+
+	public void kill() {
+		isRunning = false;
 	}
 
 	/**
@@ -136,7 +152,6 @@ public class BroadcastThread extends Thread {
 	}
 
 	/**
-	 *
 	 * @param socket
 	 * @param network
 	 * @param content
@@ -146,12 +161,11 @@ public class BroadcastThread extends Thread {
 	private void broadcast(DatagramSocket socket, String network, byte[] content, int content_length) throws IOException {
 		InetAddress group = InetAddress.getByName(network);
 		DatagramPacket packet;
-		packet = new DatagramPacket(content, content_length, group, broadcaatPort);
+		packet = new DatagramPacket(content, content_length, group, broadcastPort);
 		socket.send(packet);
 	}
 
 	/**
-	 *
 	 * @return
 	 */
 	private byte[] genChallenge() {
@@ -162,7 +176,6 @@ public class BroadcastThread extends Thread {
 	}
 
 	/**
-	 *
 	 * @param challenge
 	 * @param response
 	 * @return

@@ -9,6 +9,7 @@ public class ListenerThread extends Thread {
 	protected MulticastSocket socket = null;
 	protected String network;
 	protected String hostAddress;
+	private boolean isRunning = true;
 
 	public ListenerThread(String name, String hostAddress, String network) throws IOException {
 		super(name);
@@ -19,9 +20,16 @@ public class ListenerThread extends Thread {
 	}
 
 	public void run() {
+		try {
+			prepare();
+		} catch (IOException e) {
+			e.printStackTrace();
+			System.out.printf("Failed to listener @%s -> %s\n", hostAddress, network);
+			return;
+		}
 		startPrint();
 
-		while (true) {
+		while (isRunning) {
 			try {
 				byte[] buf = new byte[32];
 				DatagramPacket packet = new DatagramPacket(buf, buf.length);
@@ -32,31 +40,27 @@ public class ListenerThread extends Thread {
 
 				InetAddress peerAdress = packet.getAddress();
 
-				if (!peerAdress.getHostAddress().equals(hostAddress)) {
-
+				//hack
+				if (!Agent.getAgentIps().contains(peerAdress.getHostAddress())) {
 					int port = packet.getPort();
 
-					if (port == Configuration.authPort) {
-						byte[] response = solveChallenge(buf);
+					byte[] response = solveChallenge(buf);
 
-						DatagramPacket responsePacket = new DatagramPacket(response, response.length, peerAdress, port);
+					DatagramPacket responsePacket = new DatagramPacket(response, response.length, peerAdress, port);
 
-						DatagramSocket responseSocket = new DatagramSocket();
-						System.out.printf("%s@%s -> Solved the challenge, sending response\n", getName(), hostAddress);
-						responseSocket.send(responsePacket);
-					} else if (port == Configuration.commPort) {
-						//todo - complete
-
-						byte[] sharedRaw = packet.getData();
-					}
-
-
+					DatagramSocket responseSocket = new DatagramSocket();
+					System.out.printf("%s@%s -> Solved the challenge, sending response\n", getName(), hostAddress);
+					responseSocket.send(responsePacket);
 				}
 
 			} catch (IOException | NoSuchAlgorithmException e) {
 				e.printStackTrace();
 			}
 		}
+	}
+
+	public void kill() {
+		isRunning = false;
 	}
 
 	private void prepare() throws IOException {
