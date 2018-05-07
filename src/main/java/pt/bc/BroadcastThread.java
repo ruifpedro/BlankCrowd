@@ -3,10 +3,7 @@ package pt.bc;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.SocketException;
+import java.net.*;
 import java.nio.charset.Charset;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -59,11 +56,15 @@ public class BroadcastThread extends Thread {
 		Runnable broadcastTask = () -> {
 			while (isRunning) {
 				try {
-					System.out.printf("%s@%s -> Broadcasting challenge\n", getName(), hostAddress);
+					System.out.printf("%s@%s -> Broadcasting challenge\n", getName(), network);
 					//broadcast a challenge
 					broadcast(socket, network, challenge, challenge.length);
+				} catch (IOException  e) {
+//					e.printStackTrace();
+				}
+				try {
 					sleep(broadcastSleep);
-				} catch (IOException | InterruptedException e) {
+				} catch (InterruptedException e) {
 					e.printStackTrace();
 				}
 			}
@@ -78,7 +79,7 @@ public class BroadcastThread extends Thread {
 					socket.receive(packet);
 
 					if (checkChallengeResponse(challenge, data)) {
-						System.out.printf("%s@%s -> Found a friend!!\n", getName(), hostAddress);
+						System.out.printf("%s -> Found a friend!!\n", getName());
 
 						String peerAddress = packet.getAddress().getHostAddress();
 						peers.add(peerAddress);

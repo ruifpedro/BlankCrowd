@@ -23,7 +23,7 @@ public class ListenerThread extends Thread {
 		try {
 			prepare();
 		} catch (IOException e) {
-			e.printStackTrace();
+//			e.printStackTrace();
 			System.out.printf("Failed to listener @%s -> %s\n", hostAddress, network);
 			return;
 		}
